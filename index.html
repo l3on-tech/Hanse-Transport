@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Auflieger Tracker</title>
+
+<style>
+body { font-family: Arial, sans-serif; padding: 10px; background: #f5f5f5; text-align:center; margin: 0; }
+h2 { margin-bottom: 20px; }
+button { width: 95%; padding: 18px; margin: 10px 0; font-size: 20px; border: none; border-radius: 12px; }
+.menu button { font-size: 22px; }
+.btn { background: #2196F3; color: white; }
+.btn-green { background: #4CAF50; color: white; }
+.btn-red { background: #f44336; color: white; }
+input { width: 95%; padding: 15px; margin: 10px 0; font-size: 18px; border-radius: 10px; border: 1px solid #ccc; }
+.hidden { display: none; }
+.block { padding: 15px; margin: 5px auto; background: lightgray; border-radius: 10px; width: 95%; max-width: 500px; }
+.green { background: lightgreen; }
+#popup { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: white; border: 2px solid red; border-radius: 10px; padding: 15px 20px; width: 90%; max-width: 400px; }
+</style>
+</head>
+
+<body>
+
+<h2>🚛 Auflieger Tracker</h2>
+
+<div id="popup" class="hidden">
+  <div id="popupText"></div>
+</div>
+
+<div id="menu" class="menu">
+  <button class="btn-green" onclick="initAudio(); showSection('parken')">➕ Parken</button>
+  <button class="btn" onclick="initAudio(); showSection('suche')">🔍 Auflieger suchen</button>
+  <button class="btn-red" onclick="initAudio(); showSection('abholen')">❌ Abholen</button>
+</div>
+
+<div id="parken" class="hidden">
+  <input id="kennz_parken" placeholder="Kennzeichen">
+  <input id="block_parken" placeholder="Block oder Rampe">
+  <button class="btn-green" onclick="add()">Speichern</button>
+  <button onclick="back()">⬅ Zurück</button>
+</div>
+
+<div id="suche" class="hidden">
+  <input id="kennz_suche" placeholder="Kennzeichen suchen">
+  <button class="btn" onclick="search()">Suchen</button>
+  <h3 id="result"></h3>
+  <button onclick="back()">⬅ Zurück</button>
+</div>
+
+<div id="abholen" class="hidden">
+  <input id="kennz_abholen" placeholder="Kennzeichen">
+  <button class="btn-red" onclick="removeTrailer()">Abholen</button>
+  <button onclick="back()">⬅ Zurück</button>
+</div>
+
+<div id="blocks" class="hidden">
+  <div id="Block 1" class="block">Block 1</div>
+  <div id="Block 2" class="block">Block 2</div>
+  <div id="Block 3" class="block">Block 3</div>
+  <div id="Block 4" class="block">Block 4</div>
+
+  <div id="Rampe 1" class="block">Rampe 1</div>
+  <div id="Rampe 2" class="block">Rampe 2</div>
+  <div id="Rampe 3" class="block">Rampe 3</div>
+  <div id="Rampe 4" class="block">Rampe 4</div>
+  <div id="Rampe 5" class="block">Rampe 5</div>
+  <div id="Rampe 6" class="block">Rampe 6</div>
+  <div id="Rampe 8" class="block">Rampe 8</div>
+  <div id="Rampe 9" class="block">Rampe 9</div>
+  <div id="Rampe 10" class="block">Rampe 10</div>
+</div>
+
+<script>
+let trailers = JSON.parse(localStorage.getItem("trailers")) || {};
+let audioCtx;
+
+function saveData() {
+  localStorage.setItem("trailers", JSON.stringify(trailers));
+}
+
+function initAudio() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+}
+
+function beep(type) {
+  if (!audioCtx) return;
+  let osc = audioCtx.createOscillator();
+  let gain = audioCtx.createGain();
+
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+
+  osc.frequency.value = type === "success" ? 800 : 200;
+
+  osc.start();
+  gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+  osc.stop(audioCtx.currentTime + 0.3);
+}
+
+function showPopup(text, type="success") {
+  document.getElementById("popupText").textContent = text;
+  document.getElementById("popup").classList.remove("hidden");
+  beep(type);
+  setTimeout(()=>document.getElementById("popup").classList.add("hidden"),2000);
+}
+
+function showSection(id) {
+  document.getElementById("menu").classList.add("hidden");
+  document.querySelectorAll("body > div").forEach(d => {
+    if (d.id !== "menu" && d.id !== "blocks" && d.id !== "popup") d.classList.add("hidden");
+  });
+  document.getElementById(id).classList.remove("hidden");
+}
+
+function back() {
+  document.getElementById("blocks").classList.add("hidden");
+  document.getElementById("menu").classList.remove("hidden");
+  document.querySelectorAll("body > div").forEach(d => {
+    if (d.id !== "menu" && d.id !== "blocks" && d.id !== "popup") d.classList.add("hidden");
+  });
+}
+
+function add() {
+  let k = document.getElementById("kennz_parken").value;
+  let b = document.getElementById("block_parken").value;
+
+  if (k && b) {
+
+    if (!b.toLowerCase().includes("block") && !b.toLowerCase().includes("rampe")) {
+      b = "Block " + b;
+    }
+
+    if (b.match(/^([1-6]|8|9|10)$/)) {
+      b = "Rampe " + b;
+    }
+
+    if (trailers[k] && trailers[k] !== "") {
+      showPopup("❌ Auflieger " + k + " steht bereits bei " + trailers[k], "error");
+      return;
+    }
+
+    for (let key in trailers) {
+      if (trailers[key] === b) {
+        showPopup("❌ " + b + " ist schon belegt von " + key, "error");
+        return;
+      }
+    }
+
+    trailers[k] = b;
+    saveData();
+    showPopup("✅ Auflieger gespeichert", "success");
+    back();
+
+  } else {
+    showPopup("❌ Bitte alles eingeben", "error");
+  }
+}
+
+function removeTrailer() {
+  let k = document.getElementById("kennz_abholen").value;
+  if (trailers[k] !== undefined) {
+    trailers[k] = "";
+    saveData();
+    showPopup("✅ Auflieger abgeholt", "success");
+    back();
+  }
+}
+
+function search() {
+  document.getElementById("blocks").classList.remove("hidden");
+  let k = document.getElementById("kennz_suche").value;
+  let result = document.getElementById("result");
+
+  document.querySelectorAll(".block").forEach(b => b.classList.remove("green"));
+
+  if (!trailers[k]) {
+    showPopup("⏳ Noch nicht geparkt", "error");
+    result.textContent = "";
+  } else {
+    result.textContent = "✅ " + k + " steht in " + trailers[k];
+    let target = document.getElementById(trailers[k]);
+    if (target) target.classList.add("green");
+    beep("success");
+  }
+}
+</script>
+
+</body>
+</html>
